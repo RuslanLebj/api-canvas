@@ -1,0 +1,22 @@
+services:
+  api-dashboard:
+    container_name: api-dashboard
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      API_CANVAS_HOST: 0.0.0.0
+      API_CANVAS_PORT: 4174
+      API_CANVAS_HOST_GATEWAY: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "0.0.0.0:4174:4174"
+    restart: unless-stopped
+    init: true
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:4174/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
