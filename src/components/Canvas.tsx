@@ -363,8 +363,9 @@ export function Canvas() {
           const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
           const operationKey = event.dataTransfer.getData("application/api-operation");
           if (operationKey) {
-            const operation = document.spec?.operations.find((item) => item.key === operationKey);
-            if (operation) addCard(operation, position);
+            const serviceId = event.dataTransfer.getData("application/api-service") || document.activeServiceId;
+            const operation = serviceId && document.services[serviceId]?.spec.operations.find((item) => item.key === operationKey);
+            if (operation) addCard(operation, position, serviceId);
           }
           if (event.dataTransfer.getData("application/api-header-set") === "new") addHeaderSet(position);
           if (event.dataTransfer.getData("application/api-scenario-group") === "new") addScenarioGroup(position);

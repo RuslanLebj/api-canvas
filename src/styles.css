@@ -33,6 +33,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 .app-shell { width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--bg); }
 .workspace { min-height: 0; display: flex; flex: 1; }
+.services-bar { display: flex; flex: none; align-items: center; gap: 12px; min-height: 46px; padding: 7px 16px; border-bottom: 1px solid var(--line); background: #10151e; }
+.services-bar label { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .12em; }
+.services-bar select { flex: 0 1 640px; min-width: 180px; height: 30px; padding: 0 9px; border: 1px solid var(--line-bright); border-radius: 6px; background: #0a0d13; color: var(--text); font-size: 11px; }
+.services-hint { margin-left: auto; color: var(--muted); font-size: 10px; }
+.request-service { display: flex; flex-direction: column; gap: 3px; padding: 6px 12px; border-bottom: 1px solid var(--line); color: var(--accent); font-size: 9px; }
+.request-service strong, .request-service span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.request-service span { color: var(--muted); font-size: 8px; }
+@media (max-width: 1180px) { .services-hint { display: none; } }
 
 .topbar {
   height: 74px;
@@ -314,5 +322,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 @keyframes pulse { 50% { opacity: .35; } }
 @media (max-width: 1180px) {
-  .topbar { grid-template-columns: 155px 1fr 1fr; }.top-actions { display: none; }.sidebar { width: 270px; }
+  .topbar { height: auto; grid-template-columns: 155px 1fr 1fr; gap: 8px 14px; }
+  .top-actions { grid-column: 1 / -1; justify-content: flex-end; }
+  .sidebar { width: 270px; }
 }

@@ -14,17 +14,28 @@ export function Topbar() {
   const document = useCanvasStore((state) => state.document);
   const saveState = useCanvasStore((state) => state.saveState);
   const applySpec = useCanvasStore((state) => state.applySpec);
+  const setActiveService = useCanvasStore((state) => state.setActiveService);
   const setBaseUrl = useCanvasStore((state) => state.setBaseUrl);
   const replaceDocument = useCanvasStore((state) => state.replaceDocument);
   const addHeaderSet = useCanvasStore((state) => state.addHeaderSet);
   const [url, setUrl] = useState(document.specInputUrl);
+  const [addingService, setAddingService] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [authRequired, setAuthRequired] = useState(false);
   const [authHeaders, setAuthHeaders] = useState<HeaderEntry[]>([createHeaderEntry("Authorization", "Bearer ")]);
   const [saveAuth, setSaveAuth] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
-  const autoRefreshRef = useRef(false);
+  const urlRef = useRef<HTMLInputElement>(null);
+  const autoRefreshRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    setUrl(document.specInputUrl);
+    setAddingService(false);
+    setError("");
+    setAuthRequired(false);
+    setAuthHeaders([createHeaderEntry("Authorization", "Bearer ")]);
+  }, [document.id, document.activeServiceId, document.specInputUrl]);
 
   const connect = async (headers: Record<string, string> = {}) => {
     if (!url.trim()) return;
@@ -33,6 +44,7 @@ export function Topbar() {
     try {
       const spec = await resolveSpec(url.trim(), headers);
       applySpec(spec, url.trim());
+      setAddingService(false);
       setAuthRequired(false);
       if (saveAuth && Object.keys(headers).length > 0) {
         addHeaderSet({ x: 80, y: 80 }, { name: "Swagger auth", headers: authHeaders });
@@ -48,16 +60,18 @@ export function Topbar() {
 
   useEffect(() => {
     if (
-      autoRefreshRef.current ||
+      !document.activeServiceId ||
+      autoRefreshRef.current.has(document.activeServiceId) ||
+      addingService ||
       !document.spec ||
       (document.spec.normalizationVersion ?? 0) >= 2 ||
-      !url.trim()
+      url.trim() !== document.specInputUrl
     ) {
       return;
     }
-    autoRefreshRef.current = true;
+    autoRefreshRef.current.add(document.activeServiceId);
     void connect();
-  }, [document.spec, url]);
+  }, [document.spec, document.activeServiceId, url, addingService]);
 
   return (
     <>
@@ -69,13 +83,20 @@ export function Topbar() {
         <div className="swagger-control">
           <span className="control-label">SWAGGER / OPENAPI</span>
           <input
+            ref={urlRef}
+            aria-label="Swagger / OpenAPI URL"
             value={url}
             placeholder="https://service.example.com/docs"
-            onChange={(event) => setUrl(event.target.value)}
+            disabled={loading}
+            onChange={(event) => {
+              setUrl(event.target.value);
+              setAuthRequired(false);
+              setError("");
+            }}
             onKeyDown={(event) => event.key === "Enter" && connect()}
           />
           <button className="connect-button" disabled={loading || !url.trim()} onClick={() => connect()}>
-            {loading ? "Загрузка…" : document.spec ? "Обновить" : "Подключить"}
+            {loading ? "Загрузка…" : !addingService && document.spec && url.trim() === document.specInputUrl ? "Обновить" : "Добавить API"}
           </button>
         </div>
         <div className="environment-control">
@@ -83,7 +104,7 @@ export function Topbar() {
           <select
             aria-label="OpenAPI server"
             value={document.spec?.servers.some((server) => server.resolvedUrl === document.baseUrl) ? document.baseUrl : "custom"}
-            disabled={!document.spec}
+            disabled={!document.spec || addingService}
             onChange={(event) => {
               if (event.target.value !== "custom") setBaseUrl(event.target.value);
             }}
@@ -95,6 +116,7 @@ export function Topbar() {
           </select>
           <input
             aria-label="Base URL"
+            disabled={!document.spec || addingService}
             value={document.baseUrl}
             placeholder="https://api.example.com"
             onChange={(event) => setBaseUrl(event.target.value)}
@@ -124,6 +146,45 @@ export function Topbar() {
           />
         </div>
       </header>
+      <div className="services-bar">
+        <label htmlFor="active-service">СЕРВИС</label>
+        <select
+          id="active-service"
+          value={addingService ? "" : document.activeServiceId ?? ""}
+          disabled={loading}
+          onChange={(event) => {
+            setActiveService(event.target.value);
+            setAddingService(false);
+            setUrl(document.services[event.target.value].specInputUrl);
+            setError("");
+            setAuthRequired(false);
+          }}
+        >
+          <option value="" disabled>{addingService ? "Новый API — укажите Swagger выше" : "Подключите API"}</option>
+          {Object.values(document.services).map((service) => (
+            <option key={service.id} value={service.id}>
+              {service.spec.title} · {service.baseUrl || service.specInputUrl}
+            </option>
+          ))}
+        </select>
+        <button className="toolbar-button" disabled={loading} onClick={() => {
+          setAddingService(true);
+          setUrl("");
+          setError("");
+          setAuthRequired(false);
+          setAuthHeaders([createHeaderEntry("Authorization", "Bearer ")]);
+          urlRef.current?.focus();
+        }}>+ API</button>
+        {addingService && document.activeServiceId && (
+          <button className="text-button" disabled={loading} onClick={() => {
+            setAddingService(false);
+            setUrl(document.specInputUrl);
+            setError("");
+            setAuthRequired(false);
+          }}>Отмена</button>
+        )}
+        <span className="services-hint">Все сервисы на одном холсте · у каждой карточки свой API</span>
+      </div>
       {error && !authRequired && <div className="top-error"><span>{error}</span><button onClick={() => setError("")}>×</button></div>}
       {authRequired && (
         <div className="auth-panel">

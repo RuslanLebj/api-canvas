@@ -6,6 +6,7 @@ import type {
 import { useCanvasStore } from "../store";
 import { flattenRequestValues } from "../value-utils";
 import { ValuesEditor } from "./ValuesEditor";
+import { templateKey } from "../services";
 
 function suggestedTemplate(label: string, value: unknown): string {
   if (typeof value === "number") return "{int:1:999999}";
@@ -20,7 +21,7 @@ export function TemplateDialog() {
   const close = useCanvasStore((state) => state.openTemplate);
   const save = useCanvasStore((state) => state.saveTemplate);
   const operation = document.spec?.operations.find((item) => item.key === operationKey);
-  const existing = operationKey ? document.templates[operationKey] : undefined;
+  const existing = operationKey ? document.templates[templateKey(document.activeServiceId, operationKey)] : undefined;
   const initial = useMemo<OperationTemplate | undefined>(() => {
     if (!operation) return undefined;
     const example = operation.examples[0];

@@ -18,6 +18,7 @@ import { createHeaderEntry } from "../shared/types";
 import { regenerateValues } from "../shared/generators";
 import { propagateFieldLinks, wouldCreateFieldLinkCycle } from "../shared/field-links";
 import { createId } from "../shared/id";
+import { selectService, templateKey } from "./services";
 
 function now(): string {
   return new Date().toISOString();
@@ -31,6 +32,7 @@ export function createEmptyDocument(): CanvasDocument {
     name: "Новый API canvas",
     createdAt: timestamp,
     updatedAt: timestamp,
+    services: {},
     specInputUrl: "",
     baseUrl: "",
     selectedServerUrl: "",
@@ -47,6 +49,25 @@ export function createEmptyDocument(): CanvasDocument {
 
 function normalizeDocument(source: CanvasDocument): CanvasDocument {
   const document = structuredClone(source);
+  document.services ??= {};
+  if (!Object.keys(document.services).length && document.spec) {
+    const id = createId();
+    document.services[id] = {
+      id,
+      spec: document.spec,
+      specInputUrl: document.specInputUrl,
+      baseUrl: document.baseUrl,
+      selectedServerUrl: document.selectedServerUrl,
+    };
+    for (const card of Object.values(document.cards)) card.serviceId = id;
+    document.templates = Object.fromEntries(
+      Object.values(document.templates).map((template) => [templateKey(id, template.operationKey), template]),
+    );
+    document.activeServiceId = id;
+  }
+  const activeId = document.activeServiceId && document.services[document.activeServiceId]
+    ? document.activeServiceId : Object.keys(document.services)[0];
+  if (activeId) selectService(document, activeId);
   document.scenarioGroups ??= {};
   document.textCards ??= {};
   document.fieldLinks ??= [];
@@ -84,11 +105,12 @@ interface CanvasState {
   replaceDocument: (document: CanvasDocument) => void;
   setSaveState: (state: CanvasState["saveState"]) => void;
   applySpec: (spec: ResolvedSpec, inputUrl: string) => void;
+  setActiveService: (serviceId: string) => void;
   setBaseUrl: (value: string) => void;
   setName: (value: string) => void;
   openTemplate: (key?: string) => void;
   saveTemplate: (template: OperationTemplate) => void;
-  addCard: (operation: NormalizedOperation, position: { x: number; y: number }) => void;
+  addCard: (operation: NormalizedOperation, position: { x: number; y: number }, serviceId?: string) => void;
   updateCard: (id: string, patch: Partial<RequestCard>) => void;
   updateCardValues: (id: string, values: RequestValues) => void;
   regenerateCard: (id: string) => void;
@@ -148,50 +170,57 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   saveState: "saved",
   setHydrated: (hydrated) => set({ hydrated }),
   replaceDocument: (document) =>
-    set({ document: normalizeDocument(document), hydrated: true, saveState: "saved" }),
+    set({ document: normalizeDocument(document), hydrated: true, saveState: "saved", activeTemplateKey: undefined }),
   setSaveState: (saveState) => set({ saveState }),
   applySpec: (spec, inputUrl) =>
-    set((state) => {
-      const isNewSource = Boolean(
-        state.document.spec &&
-          state.document.specInputUrl &&
-          state.document.specInputUrl !== inputUrl,
-      );
-      const baseState = isNewSource
-        ? { ...state, document: createEmptyDocument() }
-        : state;
-      return mutateDocument(baseState, (document) => {
-        const existingKeys = new Set(spec.operations.map((operation) => operation.key));
-        document.spec = spec;
-        document.specInputUrl = inputUrl;
-        document.name = spec.title;
+    set((state) => ({
+      ...mutateDocument(state, (document) => {
+        const previous = Object.values(document.services).find(
+          (service) => service.spec.documentUrl === spec.documentUrl || service.specInputUrl === inputUrl,
+        );
+        const id = previous?.id ?? createId();
         const firstServer = spec.servers[0]?.resolvedUrl ?? "";
-        if (!document.baseUrl || document.selectedServerUrl === document.baseUrl) {
-          document.baseUrl = firstServer;
-          document.selectedServerUrl = firstServer;
-        }
+        const followServer = !previous?.baseUrl || previous.baseUrl === previous.selectedServerUrl;
+        if (!Object.keys(document.services).length) document.name = spec.title;
+        document.services[id] = {
+          id, spec, specInputUrl: inputUrl,
+          baseUrl: followServer ? firstServer : previous.baseUrl,
+          selectedServerUrl: firstServer,
+        };
+        selectService(document, id);
+        const existingKeys = new Set(spec.operations.map((operation) => operation.key));
         for (const card of Object.values(document.cards)) {
-          card.stale = !existingKeys.has(card.operationKey);
+          if (card.serviceId === id) card.stale = !existingKeys.has(card.operationKey);
         }
-      });
-    }),
-  setBaseUrl: (baseUrl) => set((state) => mutateDocument(state, (document) => void (document.baseUrl = baseUrl))),
+      }),
+      activeTemplateKey: undefined,
+    })),
+  setActiveService: (id) => set((state) => ({
+    ...mutateDocument(state, (document) => selectService(document, id)),
+    activeTemplateKey: undefined,
+  })),
+  setBaseUrl: (baseUrl) => set((state) => mutateDocument(state, (document) => {
+    document.baseUrl = baseUrl;
+    if (document.activeServiceId) document.services[document.activeServiceId].baseUrl = baseUrl;
+  })),
   setName: (name) => set((state) => mutateDocument(state, (document) => void (document.name = name))),
   openTemplate: (activeTemplateKey) => set({ activeTemplateKey }),
   saveTemplate: (template) =>
     set((state) => ({
       ...mutateDocument(state, (document) => {
-        document.templates[template.operationKey] = structuredClone(template);
+        document.templates[templateKey(document.activeServiceId, template.operationKey)] = structuredClone(template);
       }),
       activeTemplateKey: undefined,
     })),
-  addCard: (operation, position) =>
+  addCard: (operation, position, serviceId) =>
     set((state) =>
       mutateDocument(state, (document) => {
         const id = createId();
-        const template = document.templates[operation.key] ?? defaultTemplate(operation);
+        const sourceId = serviceId ?? document.activeServiceId;
+        const template = document.templates[templateKey(sourceId, operation.key)] ?? defaultTemplate(operation);
         document.cards[id] = {
           id,
+          serviceId: sourceId,
           name: operation.summary,
           operationKey: operation.key,
           operationSnapshot: {

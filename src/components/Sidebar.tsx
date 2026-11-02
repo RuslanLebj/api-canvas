@@ -65,6 +65,7 @@ export function Sidebar() {
                     draggable
                     onDragStart={(event) => {
                       event.dataTransfer.setData("application/api-operation", operation.key);
+                      event.dataTransfer.setData("application/api-service", document.activeServiceId ?? "");
                       event.dataTransfer.effectAllowed = "copy";
                     }}
                   >

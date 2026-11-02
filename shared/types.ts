@@ -128,6 +128,7 @@ export interface RunRecord {
 
 export interface RequestCard {
   id: string;
+  serviceId?: string;
   name: string;
   operationKey: string;
   operationSnapshot: Pick<
@@ -190,12 +191,23 @@ export interface CanvasNodeLayout {
   height?: number;
 }
 
+export interface ApiService {
+  id: string;
+  spec: ResolvedSpec;
+  specInputUrl: string;
+  baseUrl: string;
+  selectedServerUrl: string;
+}
+
 export interface CanvasDocument {
   schemaVersion: 1;
   id: string;
   name: string;
   createdAt: string;
   updatedAt: string;
+  services: Record<string, ApiService>;
+  activeServiceId?: string;
+  // Active service mirrors retained for compatibility with existing documents.
   spec?: ResolvedSpec;
   specInputUrl: string;
   baseUrl: string;

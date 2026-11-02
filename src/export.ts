@@ -12,6 +12,11 @@ function secretHeaders(entries: HeaderEntry[]): Map<string, string> {
 
 export function sanitizeForExport(source: CanvasDocument): CanvasDocument {
   const document = structuredClone(source);
+  for (const template of Object.values(document.templates)) {
+    for (const header of template.values.headers) {
+      if (header.secret) header.value = REDACTED;
+    }
+  }
   for (const headerSet of Object.values(document.headerSets)) {
     for (const header of headerSet.headers) {
       if (header.secret) header.value = REDACTED;

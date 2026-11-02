@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { NodeResizer, useUpdateNodeInternals, type Node, type NodeProps } from "@xyflow/react";
-import type { HeaderEntry, JsonValue, RunRecord } from "../../shared/types";
+import type { JsonValue, RunRecord } from "../../shared/types";
 import { execute } from "../api";
 import { useCanvasStore } from "../store";
 import { HeadersEditor } from "./HeadersEditor";
@@ -8,21 +8,10 @@ import { JsonTreeViewer } from "./JsonTree";
 import { ValuesEditor } from "./ValuesEditor";
 import { CanvasArrowHandles } from "./CanvasArrowHandles";
 import { copyText } from "../clipboard";
+import { getCardService } from "../services";
+import { buildCardRequest } from "../request";
 
 type RequestFlowNode = Node<{ entityId: string }, "request">;
-
-function mergeHeaders(...groups: HeaderEntry[][]): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const group of groups) {
-    for (const header of group) {
-      if (!header.enabled || !header.name.trim()) continue;
-      const previous = Object.keys(result).find((name) => name.toLowerCase() === header.name.toLowerCase());
-      if (previous) delete result[previous];
-      result[header.name.trim()] = header.value;
-    }
-  }
-  return result;
-}
 
 function RunDetails({ item, onDelete }: { item: RunRecord; onDelete: () => void }) {
   let responseJson: JsonValue | undefined;
@@ -96,23 +85,15 @@ export function RequestNode({ id, data, selected }: NodeProps<RequestFlowNode>) 
   if (!card) return null;
 
   const headerSet = card.headerSetId ? document.headerSets[card.headerSetId] : undefined;
-  const operation = document.spec?.operations.find((item) => item.key === card.operationKey);
+  const service = getCardService(document, card);
+  const operation = service?.spec.operations.find((item) => item.key === card.operationKey);
   const run = async () => {
     const controller = new AbortController();
     abortRef.current = controller;
     setRunning(true);
     try {
       const result = await execute(
-        {
-          baseUrl: document.baseUrl,
-          method: card.operationSnapshot.method,
-          pathTemplate: card.operationSnapshot.path,
-          path: card.values.path,
-          query: card.values.query,
-          headers: mergeHeaders(headerSet?.headers ?? [], card.values.headers, card.localHeaders),
-          body: card.values.body,
-          timeoutMs: 30_000,
-        },
+        buildCardRequest(document, card),
         controller.signal,
       );
       addRun(card.id, result);
@@ -157,6 +138,10 @@ export function RequestNode({ id, data, selected }: NodeProps<RequestFlowNode>) 
           <button className="icon-button danger" title="Удалить" onClick={() => remove(card.id)}>×</button>
         </div>
       </header>
+      <div className="request-service" title={service?.baseUrl}>
+        <strong>{service?.spec.title ?? "API не подключён"}</strong>
+        <span>{service?.baseUrl || "Укажите Base URL сервиса"}</span>
+      </div>
       {card.stale && <div className="stale-banner">Роут отсутствует в обновлённой схеме</div>}
       {!card.collapsed && (
         <>
@@ -167,7 +152,7 @@ export function RequestNode({ id, data, selected }: NodeProps<RequestFlowNode>) 
             {running ? (
               <button className="danger-button" onClick={() => abortRef.current?.abort()}>Остановить</button>
             ) : (
-              <button className="run-button" onClick={run}>▶ Выполнить</button>
+              <button className="run-button" disabled={!service?.baseUrl} onClick={run}>▶ Выполнить</button>
             )}
           </div>
           <div className="node-scroll request-scroll nowheel nodrag">
