@@ -4,3 +4,4 @@ dist-server/
 .vite/
 coverage/
 *.log
+.env

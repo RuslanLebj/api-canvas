@@ -1,6 +1,7 @@
 services:
-  api-dashboard:
-    container_name: api-dashboard
+  api-canvas:
+    image: api-canvas:local
+    container_name: api-canvas
     build:
       context: .
       dockerfile: Dockerfile
@@ -11,7 +12,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "0.0.0.0:4174:4174"
+      - "${API_CANVAS_BIND_HOST:-127.0.0.1}:4174:4174"
     restart: unless-stopped
     init: true
     healthcheck:
